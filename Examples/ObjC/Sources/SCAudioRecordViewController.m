@@ -101,7 +101,7 @@
     }];
 }
 
-- (void)recorder:(SCRecorder *)recorder didAppendAudioSampleBuffer:(SCRecordSession *)recordSession {
+- (void)recorder:(SCRecorder *)recorder didAppendAudioSampleBufferInSession:(SCRecordSession *)recordSession {
     [self updateRecordTimeLabel:recordSession.duration];
 }
 

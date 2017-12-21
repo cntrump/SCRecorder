@@ -92,7 +92,7 @@ static char* SCRecorderPhotoOptionsContext = "PhotoOptionsContext";
         [_audioConfiguration addObserver:self forKeyPath:@"enabled" options:NSKeyValueObservingOptionNew context:SCRecorderAudioEnabledContext];
         [_photoConfiguration addObserver:self forKeyPath:@"options" options:NSKeyValueObservingOptionNew context:SCRecorderPhotoOptionsContext];
         
-        _context = [SCContext new].CIContext;
+        _context = [SCContext contextWithType:[SCContext suggestedContextType] options:nil].CIContext;
     }
     
     return self;
@@ -575,10 +575,7 @@ static char* SCRecorderPhotoOptionsContext = "PhotoOptionsContext";
         return device.activeVideoMinFrameDuration;
     }
     
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-    return connection.videoMinFrameDuration;
-#pragma clang diagnostic pop
+    return device.activeVideoMinFrameDuration;
 }
 
 - (SCFilter *)_transformFilterUsingBufferWidth:(size_t)bufferWidth bufferHeight:(size_t)bufferHeight mirrored:(BOOL)mirrored {
@@ -971,7 +968,17 @@ static char* SCRecorderPhotoOptionsContext = "PhotoOptionsContext";
                 if (newDevice.isSmoothAutoFocusSupported) {
                     newDevice.smoothAutoFocusEnabled = YES;
                 }
-                newDevice.subjectAreaChangeMonitoringEnabled = true;
+
+                if ([newDevice isFocusModeSupported:AVCaptureFocusModeAutoFocus]) {
+                    newDevice.subjectAreaChangeMonitoringEnabled = true;
+                } else {
+                    if ([newDevice isExposureModeSupported:AVCaptureExposureModeContinuousAutoExposure]) {
+                        newDevice.exposureMode = AVCaptureExposureModeContinuousAutoExposure;
+                    }
+                    if ([newDevice isFocusModeSupported:AVCaptureFocusModeContinuousAutoFocus]) {
+                        newDevice.exposureMode = AVCaptureFocusModeContinuousAutoFocus;
+                    }
+                }
                 
                 if (newDevice.isLowLightBoostSupported) {
                     newDevice.automaticallyEnablesLowLightBoostWhenAvailable = YES;
@@ -1425,15 +1432,7 @@ static char* SCRecorderPhotoOptionsContext = "PhotoOptionsContext";
     CMTimeScale framerate = 0;
     
     if (deviceInput != nil) {
-        if ([deviceInput.device respondsToSelector:@selector(activeVideoMaxFrameDuration)]) {
-            framerate = deviceInput.device.activeVideoMaxFrameDuration.timescale;
-        } else {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-            AVCaptureConnection *videoConnection = [self videoConnection];
-            framerate = videoConnection.videoMaxFrameDuration.timescale;
-#pragma clang diagnostic pop
-        }
+        framerate = deviceInput.device.activeVideoMaxFrameDuration.timescale;
     }
     
     return framerate;
@@ -1449,29 +1448,12 @@ static char* SCRecorderPhotoOptionsContext = "PhotoOptionsContext";
         BOOL formatSupported = [SCRecorderTools formatInRange:device.activeFormat frameRate:framePerSeconds];
         
         if (formatSupported) {
-            if ([device respondsToSelector:@selector(activeVideoMinFrameDuration)]) {
-                if ([device lockForConfiguration:&error]) {
-                    device.activeVideoMaxFrameDuration = fps;
-                    device.activeVideoMinFrameDuration = fps;
-                    [device unlockForConfiguration];
-                } else {
-                    NSLog(@"Failed to set FramePerSeconds into camera device: %@", error.description);
-                }
+            if ([device lockForConfiguration:&error]) {
+                device.activeVideoMaxFrameDuration = fps;
+                device.activeVideoMinFrameDuration = fps;
+                [device unlockForConfiguration];
             } else {
-                AVCaptureConnection *connection = [self videoConnection];
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-                if (connection.isVideoMaxFrameDurationSupported) {
-                    connection.videoMaxFrameDuration = fps;
-                } else {
-                    NSLog(@"Failed to set FrameRate into camera device");
-                }
-                if (connection.isVideoMinFrameDurationSupported) {
-                    connection.videoMinFrameDuration = fps;
-                } else {
-                    NSLog(@"Failed to set FrameRate into camera device");
-                }
-#pragma clang diagnostic pop
+                NSLog(@"Failed to set FramePerSeconds into camera device: %@", error.description);
             }
         } else {
             NSLog(@"Unsupported frame rate %ld on current device format.", (long)framePerSeconds);
